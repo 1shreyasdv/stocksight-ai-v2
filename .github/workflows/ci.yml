@@ -1,0 +1,50 @@
+name: StockSight AI — CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-frontend:
+    name: Lint & Build Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: https://stocksight-backend-ljfa.onrender.com
+
+  lint-backend:
+    name: Lint & Test Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - run: pip install pytest pytest-asyncio httpx
+      - run: |
+          python -c "from src.utils.tradebrain import generate_ai_signal, simulate_price_series; \
+            prices = simulate_price_series(64000, 60); \
+            sig, reason, conf = generate_ai_signal('BTC', 64000, prices); \
+            print(f'Signal: {sig}, Confidence: {conf}%')"
+        env:
+          DATABASE_URL: sqlite:///./test.db
+          JWT_SECRET: test_secret_key_for_ci_only_32chars!!
+          ENVIRONMENT: test

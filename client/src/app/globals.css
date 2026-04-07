@@ -1,0 +1,81 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0a0b0f;
+  --bg2: #111318;
+  --bg3: #181b22;
+  --bg4: #1e2229;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.12);
+  --text: #e8eaf0;
+  --text2: #8b8fa8;
+  --text3: #555870;
+  --purple: #7c6ff7;
+  --purple2: #a99ff5;
+  --purple-dim: rgba(124,111,247,0.1);
+  --green: #22d3a0;
+  --green-dim: rgba(34,211,160,0.1);
+  --red: #f56565;
+  --red-dim: rgba(245,101,101,0.1);
+  --blue: #60a5fa;
+  --blue-dim: rgba(96,165,250,0.1);
+  --amber: #fbbf24;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--purple); }
+
+/* Ticker animation */
+@keyframes ticker {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.ticker-animate { animation: ticker 35s linear infinite; }
+
+/* Blink */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+.blink { animation: blink 1.3s ease-in-out infinite; }
+
+/* Fade in */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-in { animation: fadeIn 0.35s ease-out forwards; }
+
+/* Input base styles */
+input, select, textarea {
+  font-family: 'Space Grotesk', sans-serif;
+  color: var(--text);
+}
+
+input::placeholder { color: var(--text3); }
+
+/* Custom scrollbar for sidebar */
+.sidebar-scroll::-webkit-scrollbar { width: 2px; }
+.sidebar-scroll::-webkit-scrollbar-thumb { background: var(--border2); }
+
+/* Candlestick chart */
+.candle-wick { stroke-width: 1; }
+.candle-body-up { fill: #22d3a0; }
+.candle-body-dn { fill: #f56565; }
