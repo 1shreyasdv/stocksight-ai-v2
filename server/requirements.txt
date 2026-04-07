@@ -15,3 +15,4 @@ alembic==1.13.1
 slowapi==0.1.9
 pytest==8.2.0
 pytest-asyncio==0.23.6
+psycopg2-binary==2.9.9
