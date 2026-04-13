@@ -31,6 +31,11 @@ def register(payload: schemas.UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
 
+    # Automatically provision default Wallet as per specification
+    user_wallet = models.Wallet(user_id=user.id, balance=100000.0)
+    db.add(user_wallet)
+    db.commit()
+
     token = create_access_token({"sub": str(user.id), "role": user.role.value})
     return {"access_token": token, "token_type": "bearer", "user": user}
 

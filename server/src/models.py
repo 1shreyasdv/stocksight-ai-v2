@@ -44,6 +44,34 @@ class User(Base):
 
     orders = relationship("Order", back_populates="user", cascade="all, delete-orphan")
     portfolio = relationship("Portfolio", back_populates="user", cascade="all, delete-orphan")
+    wallet = relationship("Wallet", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    transactions = relationship("Transaction", back_populates="user", cascade="all, delete-orphan")
+
+
+class Wallet(Base):
+    __tablename__ = "wallets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+    balance = Column(Float, default=100000.0, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    user = relationship("User", back_populates="wallet")
+
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    asset = Column(String(20), nullable=False)
+    type = Column(Enum(OrderType), nullable=False)
+    quantity = Column(Float, nullable=False)
+    price = Column(Float, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="transactions")
 
 
 class Order(Base):
