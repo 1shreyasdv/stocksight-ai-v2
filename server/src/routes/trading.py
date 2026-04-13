@@ -72,9 +72,12 @@ def trade(data: TradeRequest,
 
 
 @router.get("/portfolio")
-def portfolio(user: User = Depends(get_current_user),
-              db: Session = Depends(get_db)):
+def get_portfolio(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     
+    transactions_check = db.query(Transaction).filter(Transaction.user_id == current_user.id).all()
+    if not transactions_check:
+        return []
+
     # Aggregate net quantity holding per asset
     result = db.query(
         Transaction.asset,
@@ -86,7 +89,7 @@ def portfolio(user: User = Depends(get_current_user),
         ).label("quantity"),
         func.avg(Transaction.price).label("avg_price")
     ).filter(
-        Transaction.user_id == user.id
+        Transaction.user_id == current_user.id
     ).group_by(
         Transaction.asset
     ).all()
@@ -126,7 +129,13 @@ def portfolio(user: User = Depends(get_current_user),
 
 
 @router.get("/wallet")
-def wallet(user: User = Depends(get_current_user),
-           db: Session = Depends(get_db)):
-    wallet = db.query(Wallet).filter(Wallet.user_id == user.id).first()
-    return {"balance": wallet.balance if wallet else 0}
+def get_wallet(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    wallet = db.query(Wallet).filter(Wallet.user_id == current_user.id).first()
+
+    if not wallet:
+        wallet = Wallet(user_id=current_user.id, balance=100000)
+        db.add(wallet)
+        db.commit()
+        db.refresh(wallet)
+
+    return wallet
