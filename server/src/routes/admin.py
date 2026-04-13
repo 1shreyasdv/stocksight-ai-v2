@@ -130,23 +130,57 @@ def list_all_orders(
     return result
 
 
+from sqlalchemy import func, extract
+from datetime import datetime, timedelta
+
 @router.get("/chart/user-growth")
 def user_growth_chart(
     _: models.User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    """Returns monthly user signup counts for the last 12 months."""
-    # Fallback to simulated data if not enough real data
-    base = [45000, 48200, 52100, 47800, 55400, 60200, 58100, 63400, 68200, 72100, 75800, 78400]
-    months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"]
-    return [{"label": months[i], "value": base[i]} for i in range(12)]
-
+    """Real monthly user signup counts for the last 12 months."""
+    now = datetime.utcnow()
+    months = []
+    for i in range(11, -1, -1):
+        month_date = now.replace(day=1) - timedelta(days=i * 30)
+        month_num = month_date.month
+        year_num = month_date.year
+        count = db.query(models.User).filter(
+            extract('month', models.User.created_at) == month_num,
+            extract('year', models.User.created_at) == year_num,
+        ).count()
+        months.append({
+            "label": month_date.strftime("%b").upper(),
+            "value": count
+        })
+    return months
 
 @router.get("/chart/trading-volume")
 def trading_volume_chart(
     _: models.User = Depends(require_admin),
+    db: Session = Depends(get_db),
 ):
-    days = ["MON","TUE","WED","THU","FRI","SAT","SUN"]
-    import random
-    data = [[random.randint(8, 18), random.randint(5, 15)] for _ in range(12)]
-    return [{"label": days[i % 7], "buy": d[0], "sell": d[1]} for i, d in enumerate(data)]
+    """Real daily buy/sell order counts for the last 7 days."""
+    now = datetime.utcnow()
+    days = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+    result = []
+    for i in range(6, -1, -1):
+        day_date = now - timedelta(days=i)
+        day_start = day_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+        buy_count = db.query(models.Order).filter(
+            models.Order.created_at >= day_start,
+            models.Order.created_at < day_end,
+            models.Order.order_type == 'buy'
+        ).count()
+        sell_count = db.query(models.Order).filter(
+            models.Order.created_at >= day_start,
+            models.Order.created_at < day_end,
+            models.Order.order_type == 'sell'
+        ).count()
+        result.append({
+            "label": days[day_date.weekday()],
+            "buy": buy_count,
+            "sell": sell_count
+        })
+    return result
