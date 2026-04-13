@@ -17,7 +17,10 @@ export default function DashboardPage() {
   const [tradeType, setTradeType] = useState('Market Order');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [portfolioValue, setPortfolioValue] = useState(0);
+  const [totalPnl, setTotalPnl] = useState(0);
+  const [walletBalance, setWalletBalance] = useState(0);
   const [orders, setOrders] = useState<any[]>([]);
+  const [portfolio, setPortfolio] = useState<any[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
 
   const showToast = (message: string, type: 'success' | 'error') => {
@@ -61,12 +64,28 @@ export default function DashboardPage() {
     const token = getToken();
     if (!token) return;
     try {
-      const res = await fetch(`${API_URL}/users/portfolio`, {
+      const res = await fetch(`${API_URL}/trading/portfolio`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
+        setPortfolio(data);
         setPortfolioValue(data.reduce((s: number, h: any) => s + (h.current_value || 0), 0));
+        setTotalPnl(data.reduce((s: number, h: any) => s + (h.pnl || 0), 0));
+      }
+    } catch (e) { console.error(e); }
+  }, []);
+
+  const fetchWallet = useCallback(async () => {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/trading/wallet`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setWalletBalance(data.balance || 0);
       }
     } catch (e) { console.error(e); }
   }, []);
@@ -74,9 +93,10 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchOrders();
     fetchPortfolio();
-    const interval = setInterval(() => { fetchOrders(); fetchPortfolio(); }, 15000);
+    fetchWallet();
+    const interval = setInterval(() => { fetchOrders(); fetchPortfolio(); fetchWallet(); }, 15000);
     return () => clearInterval(interval);
-  }, [fetchOrders, fetchPortfolio]);
+  }, [fetchOrders, fetchPortfolio, fetchWallet]);
 
   // When user selects a stock, update from live stocks list
   const handleSelectStock = (symbol: string) => {
@@ -88,30 +108,30 @@ export default function DashboardPage() {
   const qty = parseFloat(amount) || 0;
   const total = qty * price;
   const fee = total * 0.001;
-  const baseBalance = 10000;
 
   const handlePlaceOrder = async () => {
     const token = getToken();
     if (!token) { showToast('Please login to trade', 'error'); return; }
-    const qty = parseFloat(amount);
-    if (!qty || qty <= 0) { showToast('Enter a valid quantity', 'error'); return; }
+    const tradeQty = parseFloat(amount);
+    if (!tradeQty || tradeQty <= 0) { showToast('Enter a valid quantity', 'error'); return; }
     try {
-      const res = await fetch(`${API_URL}/orders/`, {
+      const res = await fetch(`${API_URL}/trading/trade`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
-          symbol: selectedStock.symbol,
-          order_type: orderSide.toLowerCase(),
-          quantity: qty,
-          price: price
+          asset: selectedStock.symbol,
+          quantity: tradeQty,
+          price: price,
+          type: orderSide
         })
       });
       const data = await res.json();
       if (res.ok) {
-        showToast(`${orderSide} order placed — ${qty} ${selectedStock.symbol} @ $${price.toLocaleString()}`, 'success');
-        setAmount('0.00');
+        showToast(`${orderSide} executed! New balance: $${data.balance?.toLocaleString()}`, 'success');
+        setAmount('');
         fetchOrders();
         fetchPortfolio();
+        fetchWallet();
       } else {
         const msg = typeof data.detail === 'string' ? data.detail
           : Array.isArray(data.detail) ? data.detail.map((e: any) => e.msg).join(', ')
@@ -155,13 +175,13 @@ export default function DashboardPage() {
       <div className="grid grid-cols-3 gap-4">
         {[
           {
-            label: 'Portfolio Value',
-            val: '$' + portfolioValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-            chg: '-',
+            label: 'Total Net Worth',
+            val: '$' + (portfolioValue + walletBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+            chg: 'Cash + Assets',
             up: null as null | boolean
           },
-          { label: '24H Gain / Loss', val: '+$0.00', chg: 'LIVE', up: true },
-          { label: 'Watchlist Alerts', val: orders.length + ' Orders', chg: 'Updated live', up: null },
+          { label: 'Unrealized P&L', val: `${totalPnl >= 0 ? '+' : ''}$${totalPnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, chg: 'LIVE', up: totalPnl >= 0 },
+          { label: 'Wallet Balance', val: '$' + walletBalance.toLocaleString('en-US', { minimumFractionDigits: 2 }), chg: 'Available to trade', up: null },
         ].map((s) => (
           <div key={s.label} className="bg-[#111318] border border-[rgba(255,255,255,0.07)] rounded-xl p-5">
             <div className="text-[10px] font-semibold tracking-[1.5px] uppercase text-[#555870] mb-3">{s.label}</div>
@@ -307,13 +327,13 @@ export default function DashboardPage() {
                 <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00"
                   className="w-full bg-[#181b22] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2.5 text-sm font-mono outline-none focus:border-[#7c6ff7] transition-colors" />
                 <div className="flex gap-1.5 mt-2">
-                  <button onClick={() => setAmount(String((baseBalance * 0.25 / parseFloat(price.toString() || '1')).toFixed(6)))}
+                  <button onClick={() => setAmount(String((walletBalance * 0.25 / parseFloat(price.toString() || '1')).toFixed(6)))}
                     className="flex-1 py-1.5 bg-[#181b22] border border-[rgba(255,255,255,0.07)] rounded-md text-xs font-mono text-[#8b8fa8] hover:border-[#7c6ff7] hover:text-[#a99ff5] transition-all">25%</button>
-                  <button onClick={() => setAmount(String((baseBalance * 0.50 / parseFloat(price.toString() || '1')).toFixed(6)))}
+                  <button onClick={() => setAmount(String((walletBalance * 0.50 / parseFloat(price.toString() || '1')).toFixed(6)))}
                     className="flex-1 py-1.5 bg-[#181b22] border border-[rgba(255,255,255,0.07)] rounded-md text-xs font-mono text-[#8b8fa8] hover:border-[#7c6ff7] hover:text-[#a99ff5] transition-all">50%</button>
-                  <button onClick={() => setAmount(String((baseBalance * 0.75 / parseFloat(price.toString() || '1')).toFixed(6)))}
+                  <button onClick={() => setAmount(String((walletBalance * 0.75 / parseFloat(price.toString() || '1')).toFixed(6)))}
                     className="flex-1 py-1.5 bg-[#181b22] border border-[rgba(255,255,255,0.07)] rounded-md text-xs font-mono text-[#8b8fa8] hover:border-[#7c6ff7] hover:text-[#a99ff5] transition-all">75%</button>
-                  <button onClick={() => setAmount(String((baseBalance * 1.00 / parseFloat(price.toString() || '1')).toFixed(6)))}
+                  <button onClick={() => setAmount(String((walletBalance * 1.00 / parseFloat(price.toString() || '1')).toFixed(6)))}
                     className="flex-1 py-1.5 bg-[#181b22] border border-[rgba(255,255,255,0.07)] rounded-md text-xs font-mono text-[#8b8fa8] hover:border-[#7c6ff7] hover:text-[#a99ff5] transition-all">100%</button>
                 </div>
               </div>

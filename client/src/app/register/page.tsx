@@ -7,17 +7,18 @@ export default function RegisterPage() {
   const router = useRouter();
   const { register, isLoading, error, clearError } = useAuthStore();
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' });
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [showPass, setShowPass] = useState(false);
-
-  const update = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
   const handleNext = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
     if (step < 3) { setStep(s => s + 1); return; }
     try {
-      await register(form.name, form.email, form.password);
+      await register(name, email, password);
       router.push('/dashboard');
     } catch {}
   };
@@ -101,7 +102,7 @@ export default function RegisterPage() {
                 <label className="block text-[10px] font-semibold tracking-[2px] uppercase text-[#555870] mb-2">Full Name</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#555870]">👤</span>
-                  <input type="text" value={form.name} onChange={e => update('name', e.target.value)} placeholder="Alexander Hamilton" required
+                  <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Alexander Hamilton" required
                     className="w-full bg-[#181b22] border border-[rgba(255,255,255,0.12)] rounded-lg py-3 pl-9 pr-4 text-sm outline-none focus:border-[#7c6ff7] transition-colors" />
                 </div>
               </div>
@@ -109,7 +110,7 @@ export default function RegisterPage() {
                 <label className="block text-[10px] font-semibold tracking-[2px] uppercase text-[#555870] mb-2">Email Address</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#555870]">✉</span>
-                  <input type="email" value={form.email} onChange={e => update('email', e.target.value)} placeholder="alex@kineticledger.com" required
+                  <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="alex@kineticledger.com" required
                     className="w-full bg-[#181b22] border border-[rgba(255,255,255,0.12)] rounded-lg py-3 pl-9 pr-4 text-sm outline-none focus:border-[#7c6ff7] transition-colors" />
                 </div>
               </div>
@@ -122,7 +123,7 @@ export default function RegisterPage() {
                 <label className="block text-[10px] font-semibold tracking-[2px] uppercase text-[#555870] mb-2">Password</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#555870]">🔒</span>
-                  <input type={showPass ? 'text' : 'password'} value={form.password} onChange={e => update('password', e.target.value)} placeholder="••••••••••••" required
+                  <input type={showPass ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••••••" required
                     className="w-full bg-[#181b22] border border-[rgba(255,255,255,0.12)] rounded-lg py-3 pl-9 pr-10 text-sm outline-none focus:border-[#7c6ff7] transition-colors" />
                   <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#555870]">{showPass ? '🙈' : '👁'}</button>
                 </div>
@@ -131,7 +132,7 @@ export default function RegisterPage() {
                 <label className="block text-[10px] font-semibold tracking-[2px] uppercase text-[#555870] mb-2">Confirm Password</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#555870]">🔒</span>
-                  <input type="password" value={form.confirm} onChange={e => update('confirm', e.target.value)} placeholder="••••••••••••" required
+                  <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="••••••••••••" required
                     className="w-full bg-[#181b22] border border-[rgba(255,255,255,0.12)] rounded-lg py-3 pl-9 pr-4 text-sm outline-none focus:border-[#7c6ff7] transition-colors" />
                 </div>
               </div>
@@ -141,11 +142,11 @@ export default function RegisterPage() {
                 <div className="flex gap-1">
                   {[1,2,3,4].map(i => (
                     <div key={i} className="h-1 flex-1 rounded-full transition-colors" style={{
-                      background: form.password.length === 0 ? 'rgba(255,255,255,0.08)' :
-                        form.password.length < 6 && i === 1 ? '#f56565' :
-                        form.password.length < 10 && i <= 2 ? '#fbbf24' :
-                        form.password.length >= 10 && i <= 3 ? '#22d3a0' :
-                        form.password.length >= 14 ? '#22d3a0' : 'rgba(255,255,255,0.08)'
+                      background: password.length === 0 ? 'rgba(255,255,255,0.08)' :
+                        password.length < 6 && i === 1 ? '#f56565' :
+                        password.length < 10 && i <= 2 ? '#fbbf24' :
+                        password.length >= 10 && i <= 3 ? '#22d3a0' :
+                        password.length >= 14 ? '#22d3a0' : 'rgba(255,255,255,0.08)'
                     }} />
                   ))}
                 </div>
@@ -157,7 +158,7 @@ export default function RegisterPage() {
             <div className="space-y-4">
               <div className="bg-[#181b22] rounded-xl p-5 border border-[rgba(255,255,255,0.07)]">
                 <div className="text-xs text-[#555870] mb-3 font-semibold tracking-wider uppercase">Review Your Details</div>
-                {[['Name', form.name], ['Email', form.email], ['Password', '••••••••••••']].map(([k, v]) => (
+                {[['Name', name], ['Email', email], ['Password', '••••••••••••']].map(([k, v]) => (
                   <div key={k} className="flex justify-between py-2 border-b border-[rgba(255,255,255,0.05)] last:border-0">
                     <span className="text-xs text-[#555870]">{k}</span>
                     <span className="text-xs font-mono text-[#e8eaf0]">{v}</span>

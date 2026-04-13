@@ -1,22 +1,47 @@
 'use client';
 import { STOCKS_DATA } from '@/lib/stocksData';
 
-const HOLDINGS = [
-  { ...STOCKS_DATA.find(s => s.symbol === 'BTC')!, qty: 0.85, avgPrice: 58200 },
-  { ...STOCKS_DATA.find(s => s.symbol === 'ETH')!, qty: 4.2, avgPrice: 3100 },
-  { ...STOCKS_DATA.find(s => s.symbol === 'NVDA')!, qty: 15, avgPrice: 780 },
-  { ...STOCKS_DATA.find(s => s.symbol === 'AAPL')!, qty: 50, avgPrice: 175 },
-  { ...STOCKS_DATA.find(s => s.symbol === 'MSFT')!, qty: 20, avgPrice: 390 },
-  { ...STOCKS_DATA.find(s => s.symbol === 'SPY')!, qty: 10, avgPrice: 490 },
-];
+import { useEffect, useState } from 'react';
 
 export default function PortfolioPage() {
-  const holdings = HOLDINGS.map(h => ({
-    ...h,
-    value: h.price * h.qty,
-    gainLoss: (h.price - h.avgPrice) * h.qty,
-    gainLossPct: ((h.price - h.avgPrice) / h.avgPrice) * 100,
-  }));
+  const [portfolio, setPortfolio] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchPortfolio = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/portfolio`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setPortfolio(data);
+      }
+    };
+
+    fetchPortfolio();
+  }, []);
+
+  const holdings = portfolio.map(h => {
+    const stockInfo = STOCKS_DATA.find(s => s.symbol === h.symbol) || { price: 0, symbol: h.symbol, name: h.symbol, logo_color: '#33333320', logo_letter: h.symbol[0] };
+    const qty = h.quantity;
+    const avgPrice = h.avg_price;
+    const price = stockInfo.price;
+    return {
+      ...stockInfo,
+      qty,
+      avgPrice,
+      price,
+      value: price * qty,
+      gainLoss: (price - avgPrice) * qty,
+      gainLossPct: avgPrice > 0 ? ((price - avgPrice) / avgPrice) * 100 : 0,
+    };
+  });
+
 
   const totalValue = holdings.reduce((s, h) => s + h.value, 0);
   const totalGain = holdings.reduce((s, h) => s + h.gainLoss, 0);

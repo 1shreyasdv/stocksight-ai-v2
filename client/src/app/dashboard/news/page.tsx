@@ -27,9 +27,7 @@ export default function NewsPage() {
 
   const fetchNews = async () => {
     try {
-      const res = await fetch(
-        `https://gnews.io/api/v4/search?q=stock%20market%20OR%20crypto&lang=en&max=20&apikey=${API_KEY}`
-      );
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/news`);
 
       if (res.status === 429) {
         console.warn("Rate limit hit");
