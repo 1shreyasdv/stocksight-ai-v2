@@ -1,6 +1,5 @@
 import type { Stock } from '@/types';
 
-// Static metadata — prices will be fetched live
 export const STOCKS_METADATA: Omit<Stock, 'price' | 'change' | 'change_pct'>[] = [
   { symbol: 'BTC', name: 'Bitcoin', volume: '$32.1B', market_cap: '$1.26T', sector: 'Crypto', status: 'active', logo_color: '#f7931a20', logo_letter: '₿', ai_signal: 'STRONG BUY', ai_reason: 'RSI recovering from oversold. Accumulation phase ending. Target $88,500.', confidence: 87, rsi: 62, ma50: 81200, ma200: 72800, high_52w: 83800, low_52w: 38500 },
   { symbol: 'ETH', name: 'Ethereum', volume: '$14.8B', market_cap: '$214B', sector: 'Crypto', status: 'hold', logo_color: '#627eea20', logo_letter: 'Ξ', ai_signal: 'HOLD', ai_reason: 'Consolidating below resistance at $1,900. Wait for breakout confirmation.', confidence: 61, rsi: 48, ma50: 1780, ma200: 1640, high_52w: 4090, low_52w: 1220 },
@@ -26,7 +25,6 @@ export const STOCKS_METADATA: Omit<Stock, 'price' | 'change' | 'change_pct'>[] =
   { symbol: 'QQQ', name: 'Nasdaq 100 ETF', volume: '$9.8B', market_cap: '$220B', sector: 'ETF', status: 'active', logo_color: '#60a5fa20', logo_letter: 'Q', ai_signal: 'STRONG BUY', ai_reason: 'Tech momentum strong.', confidence: 83, rsi: 64, ma50: 438, ma200: 398, high_52w: 470, low_52w: 328 },
 ];
 
-// Yahoo Finance symbol mapping (crypto needs -USD suffix)
 const YAHOO_SYMBOLS: Record<string, string> = {
   BTC: 'BTC-USD', ETH: 'ETH-USD', SOL: 'SOL-USD', BNB: 'BNB-USD',
   ADA: 'ADA-USD', XRP: 'XRP-USD', DOGE: 'DOGE-USD',
@@ -35,31 +33,73 @@ const YAHOO_SYMBOLS: Record<string, string> = {
   JPM: 'JPM', LLY: 'LLY', PFE: 'PFE', XOM: 'XOM', SPY: 'SPY', QQQ: 'QQQ',
 };
 
-// Fallback static prices if API fails
 const FALLBACK_PRICES: Record<string, number> = {
   BTC: 84000, ETH: 1800, SOL: 130, BNB: 590, ADA: 0.65, XRP: 2.10, DOGE: 0.17,
   NVDA: 875, AAPL: 210, MSFT: 380, GOOGL: 165, META: 510, AVGO: 1450, AMD: 155,
   TSLA: 240, AMZN: 185, JPM: 230, LLY: 810, PFE: 27, XOM: 120, SPY: 530, QQQ: 450,
 };
 
-// Cache so we don't refetch on every render
 let priceCache: Record<string, { price: number; change: number; change_pct: number }> = {};
 let lastFetchTime = 0;
-const CACHE_TTL = 60000; // 1 minute
+const CACHE_TTL = 60000;
 
-export async function fetchLivePrices() {
-  try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/market/prices`);
-    if (!res.ok) throw new Error('API failed');
-
-    return await res.json();
-  } catch (e) {
-    console.error('Backend price fetch failed:', e);
-    return {};
+export async function fetchLivePrices(): Promise<Record<string, { price: number; change: number; change_pct: number }>> {
+  const now = Date.now();
+  if (now - lastFetchTime < CACHE_TTL && Object.keys(priceCache).length > 0) {
+    return priceCache;
   }
+
+  const symbols = Object.values(YAHOO_SYMBOLS).join(',');
+
+  // Try Yahoo Finance via a CORS proxy
+  const proxies = [
+    `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols}`,
+    `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${symbols}`,
+  ];
+
+  for (const url of proxies) {
+    try {
+      const res = await fetch(url, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) continue;
+      const json = await res.json();
+      const quotes = json?.quoteResponse?.result ?? [];
+      if (quotes.length === 0) continue;
+
+      const result: Record<string, { price: number; change: number; change_pct: number }> = {};
+      for (const q of quotes) {
+        const key = Object.entries(YAHOO_SYMBOLS).find(([, v]) => v === q.symbol)?.[0];
+        if (key) {
+          result[key] = {
+            price: q.regularMarketPrice ?? FALLBACK_PRICES[key],
+            change: q.regularMarketChange ?? 0,
+            change_pct: q.regularMarketChangePercent ?? 0,
+          };
+        }
+      }
+
+      priceCache = result;
+      lastFetchTime = now;
+      return result;
+    } catch {
+      continue;
+    }
+  }
+
+  // All proxies failed — return fallbacks silently
+  console.warn('Live prices unavailable, using fallback');
+  const fallback: Record<string, { price: number; change: number; change_pct: number }> = {};
+  for (const sym of Object.keys(FALLBACK_PRICES)) {
+    fallback[sym] = { price: FALLBACK_PRICES[sym], change: 0, change_pct: 0 };
+  }
+  return fallback;
 }
 
-export function buildStocksData(prices: Record<string, { price: number; change: number; change_pct: number }>): Stock[] {
+export function buildStocksData(
+  prices: Record<string, { price: number; change: number; change_pct: number }>
+): Stock[] {
   return STOCKS_METADATA.map(meta => ({
     ...meta,
     price: prices[meta.symbol]?.price ?? FALLBACK_PRICES[meta.symbol] ?? 0,
@@ -68,7 +108,7 @@ export function buildStocksData(prices: Record<string, { price: number; change: 
   }));
 }
 
-// Static export for components that haven't loaded live data yet
+// Static fallback export — used before live data loads
 export const STOCKS_DATA: Stock[] = STOCKS_METADATA.map(meta => ({
   ...meta,
   price: FALLBACK_PRICES[meta.symbol] ?? 0,
@@ -78,7 +118,7 @@ export const STOCKS_DATA: Stock[] = STOCKS_METADATA.map(meta => ({
 
 export const TICKER_DATA = STOCKS_DATA.map(s => ({
   sym: s.symbol,
-  val: s.price < 10 ? `$${s.price.toFixed(4)}` : s.price < 100 ? `$${s.price.toFixed(2)}` : `$${s.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+  val: s.price < 1 ? `$${s.price.toFixed(4)}` : s.price < 100 ? `$${s.price.toFixed(2)}` : `$${s.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
   chg: `${s.change_pct >= 0 ? '+' : ''}${s.change_pct.toFixed(2)}%`,
   up: s.change_pct >= 0,
 }));
@@ -98,7 +138,7 @@ export function generateCandlestickData(symbol: string, basePrice?: number, days
       time: new Date(now - i * 86400000).toISOString().split('T')[0],
       open: +open.toFixed(2), high: +high.toFixed(2),
       low: +low.toFixed(2), close: +close.toFixed(2),
-      volume: Math.floor(Math.random() * 1000000 + 500000)
+      volume: Math.floor(Math.random() * 1000000 + 500000),
     });
     current = close;
   }

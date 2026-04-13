@@ -10,35 +10,37 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://stocksight-ai-v2-api
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [stocks, setStocks] = useState<Stock[]>(STOCKS_DATA); // start with fallback
+  const [stocks, setStocks] = useState<Stock[]>(STOCKS_DATA);
   const [selectedStock, setSelectedStock] = useState<Stock>(STOCKS_DATA[0]);
   const [orderSide, setOrderSide] = useState<'BUY' | 'SELL'>('BUY');
   const [amount, setAmount] = useState('');
   const [tradeType, setTradeType] = useState('Market Order');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [portfolioValue, setPortfolioValue] = useState(0);
-  const [totalPnl, setTotalPnl] = useState(0);
-  const [walletBalance, setWalletBalance] = useState(0);
   const [orders, setOrders] = useState<any[]>([]);
-  const [portfolio, setPortfolio] = useState<any[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
+  const [pricesLoading, setPricesLoading] = useState(true);
 
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Load live prices
+  // Load live prices on mount and every 60s
   useEffect(() => {
     const loadPrices = async () => {
-      const prices = await fetchLivePrices();
-      const liveStocks = buildStocksData(prices);
-      setStocks(liveStocks);
-      // Update selectedStock price too
-      setSelectedStock(prev => liveStocks.find(s => s.symbol === prev.symbol) ?? prev);
+      setPricesLoading(true);
+      try {
+        const prices = await fetchLivePrices();
+        const liveStocks = buildStocksData(prices);
+        setStocks(liveStocks);
+        setSelectedStock(prev => liveStocks.find(s => s.symbol === prev.symbol) ?? prev);
+      } finally {
+        setPricesLoading(false);
+      }
     };
     loadPrices();
-    const interval = setInterval(loadPrices, 60000); // refresh every 60s
+    const interval = setInterval(loadPrices, 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -56,7 +58,7 @@ export default function DashboardPage() {
         localStorage.removeItem('token');
         window.location.href = '/login';
       }
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error('fetchOrders:', e); }
     finally { setLoadingOrders(false); }
   }, []);
 
@@ -64,41 +66,23 @@ export default function DashboardPage() {
     const token = getToken();
     if (!token) return;
     try {
-      const res = await fetch(`${API_URL}/trading/portfolio`, {
+      const res = await fetch(`${API_URL}/users/portfolio`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
-        setPortfolio(data);
         setPortfolioValue(data.reduce((s: number, h: any) => s + (h.current_value || 0), 0));
-        setTotalPnl(data.reduce((s: number, h: any) => s + (h.pnl || 0), 0));
       }
-    } catch (e) { console.error(e); }
-  }, []);
-
-  const fetchWallet = useCallback(async () => {
-    const token = getToken();
-    if (!token) return;
-    try {
-      const res = await fetch(`${API_URL}/trading/wallet`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setWalletBalance(data.balance || 0);
-      }
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error('fetchPortfolio:', e); }
   }, []);
 
   useEffect(() => {
     fetchOrders();
     fetchPortfolio();
-    fetchWallet();
-    const interval = setInterval(() => { fetchOrders(); fetchPortfolio(); fetchWallet(); }, 15000);
+    const interval = setInterval(() => { fetchOrders(); fetchPortfolio(); }, 15000);
     return () => clearInterval(interval);
-  }, [fetchOrders, fetchPortfolio, fetchWallet]);
+  }, [fetchOrders, fetchPortfolio]);
 
-  // When user selects a stock, update from live stocks list
   const handleSelectStock = (symbol: string) => {
     const found = stocks.find(s => s.symbol === symbol);
     if (found) setSelectedStock(found);
@@ -108,30 +92,30 @@ export default function DashboardPage() {
   const qty = parseFloat(amount) || 0;
   const total = qty * price;
   const fee = total * 0.001;
+  const baseBalance = 10000;
 
   const handlePlaceOrder = async () => {
     const token = getToken();
     if (!token) { showToast('Please login to trade', 'error'); return; }
-    const tradeQty = parseFloat(amount);
-    if (!tradeQty || tradeQty <= 0) { showToast('Enter a valid quantity', 'error'); return; }
+    const parsedQty = parseFloat(amount);
+    if (!parsedQty || parsedQty <= 0) { showToast('Enter a valid quantity', 'error'); return; }
     try {
-      const res = await fetch(`${API_URL}/trading/trade`, {
+      const res = await fetch(`${API_URL}/orders/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
-          asset: selectedStock.symbol,
-          quantity: tradeQty,
-          price: price,
-          type: orderSide
+          symbol: selectedStock.symbol,
+          order_type: orderSide.toLowerCase(),
+          quantity: parsedQty,
+          price: price
         })
       });
       const data = await res.json();
       if (res.ok) {
-        showToast(`${orderSide} executed! New balance: $${data.balance?.toLocaleString()}`, 'success');
-        setAmount('');
+        showToast(`${orderSide} order placed — ${parsedQty} ${selectedStock.symbol} @ $${price.toLocaleString()}`, 'success');
+        setAmount('0.00');
         fetchOrders();
         fetchPortfolio();
-        fetchWallet();
       } else {
         const msg = typeof data.detail === 'string' ? data.detail
           : Array.isArray(data.detail) ? data.detail.map((e: any) => e.msg).join(', ')
@@ -149,21 +133,12 @@ export default function DashboardPage() {
       {/* Toast */}
       {toast && (
         <div style={{
-          position: 'fixed',
-          top: 24,
-          right: 24,
-          zIndex: 9999,
+          position: 'fixed', top: 24, right: 24, zIndex: 9999,
           background: toast.type === 'success' ? '#0d2b1e' : '#2b0d0d',
           border: `1px solid ${toast.type === 'success' ? '#10b98155' : '#ef444455'}`,
           color: toast.type === 'success' ? '#10b981' : '#ef4444',
-          padding: '12px 20px',
-          borderRadius: 10,
-          fontSize: 13,
-          fontWeight: 500,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          minWidth: 280,
+          padding: '12px 20px', borderRadius: 10, fontSize: 13, fontWeight: 500,
+          display: 'flex', alignItems: 'center', gap: 10, minWidth: 280,
           boxShadow: '0 4px 24px rgba(0,0,0,0.4)'
         }}>
           <span>{toast.type === 'success' ? '✓' : '✕'}</span>
@@ -171,17 +146,20 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Live price indicator */}
+      {pricesLoading && (
+        <div className="flex items-center gap-2 text-xs text-[#555870]">
+          <div className="w-1.5 h-1.5 rounded-full bg-[#fbbf24] animate-pulse" />
+          Fetching live prices...
+        </div>
+      )}
+
       {/* Stat Row */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          {
-            label: 'Total Net Worth',
-            val: '$' + (portfolioValue + walletBalance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-            chg: 'Cash + Assets',
-            up: null as null | boolean
-          },
-          { label: 'Unrealized P&L', val: `${totalPnl >= 0 ? '+' : ''}$${totalPnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, chg: 'LIVE', up: totalPnl >= 0 },
-          { label: 'Wallet Balance', val: '$' + walletBalance.toLocaleString('en-US', { minimumFractionDigits: 2 }), chg: 'Available to trade', up: null },
+          { label: 'Portfolio Value', val: '$' + portfolioValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), chg: '-', up: null as null | boolean },
+          { label: '24H Gain / Loss', val: '+$0.00', chg: 'LIVE', up: true },
+          { label: 'Watchlist Alerts', val: orders.length + ' Orders', chg: 'Updated live', up: null },
         ].map((s) => (
           <div key={s.label} className="bg-[#111318] border border-[rgba(255,255,255,0.07)] rounded-xl p-5">
             <div className="text-[10px] font-semibold tracking-[1.5px] uppercase text-[#555870] mb-3">{s.label}</div>
@@ -197,7 +175,7 @@ export default function DashboardPage() {
             }
             <div className="flex items-end gap-1 mt-3 h-7">
               {[40,55,45,65,50,80,60,75,55,70].map((h, i) => (
-                <div key={i} className="flex-1 rounded-sm transition-colors"
+                <div key={i} className="flex-1 rounded-sm"
                   style={{ height: `${h}%`, background: i === 9 ? (s.up === false ? '#f56565' : '#7c6ff7') : 'rgba(255,255,255,0.08)' }} />
               ))}
             </div>
@@ -210,18 +188,19 @@ export default function DashboardPage() {
         {stocks.map(s => (
           <button key={s.symbol} onClick={() => handleSelectStock(s.symbol)}
             className={`flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-mono transition-all ${selectedStock.symbol === s.symbol ? 'border-[#7c6ff7] bg-[rgba(124,111,247,0.1)] text-[#a99ff5]' : 'border-[rgba(255,255,255,0.07)] text-[#8b8fa8] hover:border-[rgba(255,255,255,0.15)]'}`}>
-            <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold" style={{ background: s.logo_color, color: s.logo_color.replace('20', '') }}>
+            <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold"
+              style={{ background: s.logo_color, color: s.logo_color.replace('20', '') }}>
               {s.logo_letter}
             </div>
             {s.symbol}
             <span className={s.change_pct >= 0 ? 'text-[#22d3a0]' : 'text-[#f56565]'}>
-              {s.change_pct >= 0 ? '+' : ''}{s.change_pct.toFixed(1)}%
+              {s.change_pct >= 0 ? '+' : ''}{s.change_pct.toFixed(2)}%
             </span>
           </button>
         ))}
       </div>
 
-      {/* Main Grid: Chart + Order Panel */}
+      {/* Main Grid */}
       <div className="grid grid-cols-[1fr_320px] gap-4">
         <div className="space-y-4">
           <CandlestickChart symbol={selectedStock.symbol} basePrice={selectedStock.price} volatility={selectedStock.price * 0.012} />
@@ -235,53 +214,39 @@ export default function DashboardPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-[10px] font-semibold uppercase tracking-wider text-[#555870] border-b border-[rgba(255,255,255,0.05)]">
-                  <th className="text-left pb-3">Asset</th><th className="text-left pb-3">Type</th>
-                  <th className="text-left pb-3">Amount</th><th className="text-left pb-3">Price</th>
+                  <th className="text-left pb-3">Asset</th>
+                  <th className="text-left pb-3">Type</th>
+                  <th className="text-left pb-3">Amount</th>
+                  <th className="text-left pb-3">Price</th>
                   <th className="text-left pb-3">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {loadingOrders ? (
-                  <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>Loading orders...</td></tr>
+                  <tr><td colSpan={5} className="text-center py-8 text-[#666]">Loading orders...</td></tr>
                 ) : orders.length === 0 ? (
-                  <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: '#666', fontSize: 13 }}>
-                    No trades yet. Place your first order above.
-                  </td></tr>
+                  <tr><td colSpan={5} className="text-center py-8 text-[#666] text-[13px]">No trades yet. Place your first order above.</td></tr>
                 ) : orders.slice(0, 5).map((order: any) => (
                   <tr key={order.id} style={{ borderBottom: '1px solid #ffffff08' }}>
-                    <td style={{ padding: '12px 16px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{
-                          width: 28, height: 28, borderRadius: '50%',
-                          background: '#ffffff15', display: 'flex',
-                          alignItems: 'center', justifyContent: 'center',
-                          fontSize: 11, fontWeight: 600
-                        }}>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-[#ffffff15] flex items-center justify-center text-[11px] font-semibold">
                           {order.symbol?.slice(0, 1)}
                         </div>
                         {order.symbol}
                       </div>
                     </td>
-                    <td style={{ padding: '12px 16px' }}>
+                    <td className="py-3 px-4">
                       <span style={{
                         background: order.order_type === 'buy' ? '#10b98122' : '#ef444422',
                         color: order.order_type === 'buy' ? '#10b981' : '#ef4444',
                         padding: '3px 10px', borderRadius: 4, fontSize: 11, fontWeight: 600
-                      }}>
-                        {order.order_type?.toUpperCase()}
-                      </span>
+                      }}>{order.order_type?.toUpperCase()}</span>
                     </td>
-                    <td style={{ padding: '12px 16px', fontSize: 13 }}>
-                      {order.quantity} {order.symbol}
-                    </td>
-                    <td style={{ padding: '12px 16px', fontSize: 13 }}>
-                      ${Number(order.price).toLocaleString()}
-                    </td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <span style={{
-                        background: '#10b98122', color: '#10b981',
-                        padding: '3px 10px', borderRadius: 4, fontSize: 11
-                      }}>
+                    <td className="py-3 px-4 text-[13px]">{order.quantity} {order.symbol}</td>
+                    <td className="py-3 px-4 text-[13px]">${Number(order.price).toLocaleString()}</td>
+                    <td className="py-3 px-4">
+                      <span style={{ background: '#10b98122', color: '#10b981', padding: '3px 10px', borderRadius: 4, fontSize: 11 }}>
                         {(order.status || 'COMPLETED').toUpperCase()}
                       </span>
                     </td>
@@ -295,12 +260,19 @@ export default function DashboardPage() {
         {/* Order Panel */}
         <div className="space-y-4">
           <div className="bg-[#111318] border border-[rgba(255,255,255,0.07)] rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-5">
-              <span className="font-semibold">Place Order</span>
-              <span className="text-xs font-mono text-[#555870]">{selectedStock.symbol}/USD</span>
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold">Place Order</span>
+                <span className="text-xs font-mono text-[#555870]">{selectedStock.symbol}/USD</span>
+              </div>
+              <span className="text-lg font-bold font-mono">
+                ${price < 10 ? price.toFixed(4) : price < 1000 ? price.toFixed(2) : price.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div className={`text-xs font-mono mb-5 ${selectedStock.change_pct >= 0 ? 'text-[#22d3a0]' : 'text-[#f56565]'}`}>
+              {selectedStock.change_pct >= 0 ? '+' : ''}{selectedStock.change_pct.toFixed(2)}% today
             </div>
 
-            {/* BUY/SELL Toggle */}
             <div className="flex bg-[#181b22] rounded-lg p-1 mb-5">
               {(['BUY', 'SELL'] as const).map(t => (
                 <button key={t} onClick={() => setOrderSide(t)}
@@ -314,27 +286,24 @@ export default function DashboardPage() {
               <div>
                 <div className="text-[10px] font-semibold tracking-[1.5px] uppercase text-[#555870] mb-2">Price (USD)</div>
                 <div className="flex gap-2">
-                  <input type="text" readOnly value={price.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  <input type="text" readOnly
+                    value={price < 10 ? price.toFixed(4) : price.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     className="flex-1 bg-[#181b22] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2.5 text-sm font-mono outline-none" />
                   <div className="bg-[#181b22] border border-[rgba(255,255,255,0.07)] rounded-lg px-3 py-2.5 text-xs text-[#555870] font-mono">MARKET</div>
                 </div>
               </div>
 
               <div>
-                <div className="text-[10px] font-semibold tracking-[1.5px] uppercase text-[#555870] mb-2">
-                  Amount ({selectedStock.symbol})
-                </div>
+                <div className="text-[10px] font-semibold tracking-[1.5px] uppercase text-[#555870] mb-2">Amount ({selectedStock.symbol})</div>
                 <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00"
                   className="w-full bg-[#181b22] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2.5 text-sm font-mono outline-none focus:border-[#7c6ff7] transition-colors" />
                 <div className="flex gap-1.5 mt-2">
-                  <button onClick={() => setAmount(String((walletBalance * 0.25 / parseFloat(price.toString() || '1')).toFixed(6)))}
-                    className="flex-1 py-1.5 bg-[#181b22] border border-[rgba(255,255,255,0.07)] rounded-md text-xs font-mono text-[#8b8fa8] hover:border-[#7c6ff7] hover:text-[#a99ff5] transition-all">25%</button>
-                  <button onClick={() => setAmount(String((walletBalance * 0.50 / parseFloat(price.toString() || '1')).toFixed(6)))}
-                    className="flex-1 py-1.5 bg-[#181b22] border border-[rgba(255,255,255,0.07)] rounded-md text-xs font-mono text-[#8b8fa8] hover:border-[#7c6ff7] hover:text-[#a99ff5] transition-all">50%</button>
-                  <button onClick={() => setAmount(String((walletBalance * 0.75 / parseFloat(price.toString() || '1')).toFixed(6)))}
-                    className="flex-1 py-1.5 bg-[#181b22] border border-[rgba(255,255,255,0.07)] rounded-md text-xs font-mono text-[#8b8fa8] hover:border-[#7c6ff7] hover:text-[#a99ff5] transition-all">75%</button>
-                  <button onClick={() => setAmount(String((walletBalance * 1.00 / parseFloat(price.toString() || '1')).toFixed(6)))}
-                    className="flex-1 py-1.5 bg-[#181b22] border border-[rgba(255,255,255,0.07)] rounded-md text-xs font-mono text-[#8b8fa8] hover:border-[#7c6ff7] hover:text-[#a99ff5] transition-all">100%</button>
+                  {[0.25, 0.50, 0.75, 1.00].map((pct, i) => (
+                    <button key={i} onClick={() => setAmount(String((baseBalance * pct / (price || 1)).toFixed(6)))}
+                      className="flex-1 py-1.5 bg-[#181b22] border border-[rgba(255,255,255,0.07)] rounded-md text-xs font-mono text-[#8b8fa8] hover:border-[#7c6ff7] hover:text-[#a99ff5] transition-all">
+                      {pct * 100}%
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -387,7 +356,7 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Stock Metrics */}
+          {/* Metrics */}
           <div className="bg-[#111318] border border-[rgba(255,255,255,0.07)] rounded-xl p-4">
             <div className="text-xs font-semibold text-[#555870] mb-3 tracking-wider">METRICS</div>
             <div className="space-y-2">
