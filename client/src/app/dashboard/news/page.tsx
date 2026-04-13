@@ -28,16 +28,16 @@ export default function NewsPage() {
   const fetchNews = async () => {
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/news`);
-
-      if (res.status === 429) {
-        console.warn("Rate limit hit");
-        return;
-      }
-
       const data = await res.json();
-      setNews(data.articles || []);
+
+      console.log("NEWS DATA:", data);
+
+      const articles = data.articles || [];
+      setNews(articles);
+
     } catch (err) {
-      console.error('News fetch failed:', err);
+      console.error('News error:', err);
+      setNews([]);
     } finally {
       setLoading(false);
     }
@@ -58,14 +58,16 @@ export default function NewsPage() {
 
       {loading ? (
         <div>Loading news...</div>
+      ) : news.length === 0 ? (
+        <p>No news available</p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {news.map((item, i) => {
+          {news.map((item) => {
             const sentiment = sentimentFromTitle(item.title);
 
             return (
               <div
-                key={i}
+                key={item.url}
                 onClick={() => window.open(item.url, '_blank')}
                 style={{
                   background: '#0d0d1a',

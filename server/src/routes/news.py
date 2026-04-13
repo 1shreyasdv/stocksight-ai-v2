@@ -4,12 +4,11 @@ import os
 
 router = APIRouter()
 
-GNEWS_API_KEY = os.getenv("GNEWS_API_KEY")
-
 @router.get("/news")
 def get_news():
     try:
-        url = f"https://gnews.io/api/v4/search?q=stock market&lang=en&max=10&apikey={GNEWS_API_KEY}"
+        api_key = os.getenv("GNEWS_API_KEY")
+        url = f"https://gnews.io/api/v4/search?q=stock%20market&lang=en&max=10&apikey={api_key}"
         res = requests.get(url)
         return res.json()
     except Exception as e:
