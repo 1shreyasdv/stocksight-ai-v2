@@ -1,7 +1,7 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://stocksight-backend-ljfa.onrender.com';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://stocksight-ai-v2-api.onrender.com';
 
 export const api = axios.create({
   baseURL: API_URL,
@@ -9,21 +9,30 @@ export const api = axios.create({
   timeout: 15000,
 });
 
-// Attach token
+// Helper: get token from either cookies OR localStorage (whichever exists)
+export const getToken = (): string | null => {
+  return Cookies.get('access_token') || localStorage.getItem('token') || null;
+};
+
+// Attach token to every request
 api.interceptors.request.use((config) => {
-  const token = Cookies.get('access_token');
+  const token = getToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// Handle 401
+// Handle 401 — clear both storage locations and redirect
 api.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401) {
-      Cookies.remove('access_token');
-      Cookies.remove('user_role');
-      window.location.href = '/login';
+      if (!window.location.pathname.includes('admin')) {
+        Cookies.remove('access_token');
+        Cookies.remove('user_role');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(err);
   }

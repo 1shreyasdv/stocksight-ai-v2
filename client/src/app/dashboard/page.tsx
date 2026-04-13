@@ -1,72 +1,88 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import CandlestickChart from '@/components/charts/CandlestickChart';
-import { STOCKS_DATA } from '@/lib/stocksData';
+import { STOCKS_DATA, buildStocksData, fetchLivePrices } from '@/lib/stocksData';
+import { getToken } from '@/lib/api';
+import type { Stock } from '@/types';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://stocksight-ai-v2-api.onrender.com';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [selectedStock, setSelectedStock] = useState(STOCKS_DATA[0]);
+  const [stocks, setStocks] = useState<Stock[]>(STOCKS_DATA); // start with fallback
+  const [selectedStock, setSelectedStock] = useState<Stock>(STOCKS_DATA[0]);
   const [orderSide, setOrderSide] = useState<'BUY' | 'SELL'>('BUY');
   const [amount, setAmount] = useState('');
   const [tradeType, setTradeType] = useState('Market Order');
-
-  // Toast system
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [portfolioValue, setPortfolioValue] = useState(0);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Real data states
-  const [portfolioValue, setPortfolioValue] = useState(0);
-  const [orders, setOrders] = useState<any[]>([]);
-  const [loadingOrders, setLoadingOrders] = useState(true);
+  // Load live prices
+  useEffect(() => {
+    const loadPrices = async () => {
+      const prices = await fetchLivePrices();
+      const liveStocks = buildStocksData(prices);
+      setStocks(liveStocks);
+      // Update selectedStock price too
+      setSelectedStock(prev => liveStocks.find(s => s.symbol === prev.symbol) ?? prev);
+    };
+    loadPrices();
+    const interval = setInterval(loadPrices, 60000); // refresh every 60s
+    return () => clearInterval(interval);
+  }, []);
 
-  const getToken = () => localStorage.getItem('token');
-
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     const token = getToken();
-    if (!token) return;
+    if (!token) { setLoadingOrders(false); return; }
     try {
-      const res = await fetch('http://localhost:8000/orders/', {
+      const res = await fetch(`${API_URL}/orders/`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
         setOrders(Array.isArray(data) ? data : []);
+      } else if (res.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
       }
-    } catch {}
+    } catch (e) { console.error(e); }
     finally { setLoadingOrders(false); }
-  };
+  }, []);
 
-  const fetchPortfolio = async () => {
+  const fetchPortfolio = useCallback(async () => {
     const token = getToken();
     if (!token) return;
     try {
-      const res = await fetch('http://localhost:8000/users/portfolio', {
+      const res = await fetch(`${API_URL}/users/portfolio`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
-        const total = data.reduce(
-          (s: number, h: any) => s + (h.current_value || 0),
-          0
-        );
-        setPortfolioValue(total);
+        setPortfolioValue(data.reduce((s: number, h: any) => s + (h.current_value || 0), 0));
       }
-    } catch {}
-  };
+    } catch (e) { console.error(e); }
+  }, []);
 
   useEffect(() => {
     fetchOrders();
     fetchPortfolio();
-    const interval = setInterval(() => {
-      fetchOrders();
-      fetchPortfolio();
-    }, 15000);
+    const interval = setInterval(() => { fetchOrders(); fetchPortfolio(); }, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchOrders, fetchPortfolio]);
+
+  // When user selects a stock, update from live stocks list
+  const handleSelectStock = (symbol: string) => {
+    const found = stocks.find(s => s.symbol === symbol);
+    if (found) setSelectedStock(found);
+  };
 
   const price = selectedStock.price;
   const qty = parseFloat(amount) || 0;
@@ -76,50 +92,33 @@ export default function DashboardPage() {
 
   const handlePlaceOrder = async () => {
     const token = getToken();
-    if (!token) {
-      showToast('Please login to trade', 'error');
-      return;
-    }
+    if (!token) { showToast('Please login to trade', 'error'); return; }
     const qty = parseFloat(amount);
-    const px = parseFloat(price.toString());
-    if (!qty || qty <= 0) {
-      showToast('Enter a valid quantity', 'error');
-      return;
-    }
+    if (!qty || qty <= 0) { showToast('Enter a valid quantity', 'error'); return; }
     try {
-      const res = await fetch('http://localhost:8000/orders/', {
+      const res = await fetch(`${API_URL}/orders/`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({
           symbol: selectedStock.symbol,
           order_type: orderSide.toLowerCase(),
           quantity: qty,
-          price: px
+          price: price
         })
       });
       const data = await res.json();
       if (res.ok) {
-        showToast(
-          `${orderSide} order placed — ${qty} ${selectedStock.symbol} @ $${px.toLocaleString()}`,
-          'success'
-        );
+        showToast(`${orderSide} order placed — ${qty} ${selectedStock.symbol} @ $${price.toLocaleString()}`, 'success');
         setAmount('0.00');
         fetchOrders();
         fetchPortfolio();
       } else {
-        const msg = typeof data.detail === 'string'
-          ? data.detail
-          : Array.isArray(data.detail)
-            ? data.detail.map((e: any) => e.msg).join(', ')
-            : 'Order failed';
+        const msg = typeof data.detail === 'string' ? data.detail
+          : Array.isArray(data.detail) ? data.detail.map((e: any) => e.msg).join(', ')
+          : 'Order failed';
         showToast(msg, 'error');
       }
-    } catch {
-      showToast('Network error. Is backend running?', 'error');
-    }
+    } catch { showToast('Network error. Is backend running?', 'error'); }
   };
 
   const signalColor = selectedStock.ai_signal?.includes('BUY') ? '#22d3a0' : selectedStock.ai_signal?.includes('SELL') ? '#f56565' : '#fbbf24';
@@ -188,8 +187,8 @@ export default function DashboardPage() {
 
       {/* Stock Selector */}
       <div className="flex gap-2 overflow-x-auto pb-1 custom-scroll">
-        {STOCKS_DATA.map(s => (
-          <button key={s.symbol} onClick={() => setSelectedStock(s)}
+        {stocks.map(s => (
+          <button key={s.symbol} onClick={() => handleSelectStock(s.symbol)}
             className={`flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-mono transition-all ${selectedStock.symbol === s.symbol ? 'border-[#7c6ff7] bg-[rgba(124,111,247,0.1)] text-[#a99ff5]' : 'border-[rgba(255,255,255,0.07)] text-[#8b8fa8] hover:border-[rgba(255,255,255,0.15)]'}`}>
             <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold" style={{ background: s.logo_color, color: s.logo_color.replace('20', '') }}>
               {s.logo_letter}

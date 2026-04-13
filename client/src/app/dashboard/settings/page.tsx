@@ -1,10 +1,32 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { getToken } from '@/lib/api';
 
 export default function SettingsPage() {
+  const [user, setUser] = useState<any>(null);
   const [notifications, setNotifications] = useState(true);
   const [aiSignals, setAiSignals] = useState(true);
   const [twoFa, setTwoFa] = useState(false);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const token = getToken();
+      if (!token) return;
+
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data);
+      }
+    };
+
+    fetchUser();
+  }, []);
 
   return (
     <div className="space-y-5 max-w-2xl">
@@ -16,8 +38,8 @@ export default function SettingsPage() {
       {[
         {
           title: 'Profile', items: [
-            { label: 'Full Name', type: 'text', val: 'Alex Rivera' },
-            { label: 'Email', type: 'email', val: 'alex@kineticledger.com' },
+            { label: 'Full Name', type: 'text', val: user?.name || '' },
+            { label: 'Email', type: 'email', val: user?.email || '' },
           ]
         },
         {
@@ -31,7 +53,7 @@ export default function SettingsPage() {
           <div className="font-semibold mb-4">{section.title}</div>
           <div className="space-y-3">
             {section.items.map(item => (
-              <div key={item.label}>
+              <div key={item.label + (item.val || '')}>
                 <label className="block text-[10px] uppercase tracking-wider text-[#555870] mb-1.5 font-semibold">{item.label}</label>
                 <input type={item.type} defaultValue={item.val}
                   className="w-full bg-[#181b22] border border-[rgba(255,255,255,0.1)] rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#7c6ff7] transition-colors" />

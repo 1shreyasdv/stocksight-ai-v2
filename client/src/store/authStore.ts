@@ -53,12 +53,14 @@ export const useAuthStore = create<AuthState>((set) => ({
       const form = new URLSearchParams();
       form.append('username', email);
       form.append('password', password);
-      const res = await api.post('/auth/login', form, {
+      const res = await api.post('/auth/login', form.toString(), {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
       const { access_token, user } = res.data;
       Cookies.set('access_token', access_token, { expires: 30, sameSite: 'strict' });
       Cookies.set('user_role', user.role, { expires: 30 });
+      localStorage.setItem('token', access_token);
+      localStorage.setItem('user', JSON.stringify({ role: user.role }));
       set({ user, token: access_token, isLoading: false });
       return user.role as 'user' | 'admin';
     } catch (err: unknown) {
@@ -75,6 +77,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       const { access_token, user } = res.data;
       Cookies.set('access_token', access_token, { expires: 1, sameSite: 'strict' });
       Cookies.set('user_role', 'admin', { expires: 1 });
+      localStorage.setItem('token', access_token);
+      localStorage.setItem('user', JSON.stringify({ role: 'admin' }));
       set({ user, token: access_token, role: 'admin', isLoading: false });
       return access_token;
     } catch (err: unknown) {
@@ -91,6 +95,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       const { access_token, user } = res.data;
       Cookies.set('access_token', access_token, { expires: 30 });
       Cookies.set('user_role', user.role, { expires: 30 });
+      localStorage.setItem('token', access_token);
+      localStorage.setItem('user', JSON.stringify({ role: user.role }));
       set({ user, token: access_token, isLoading: false });
     } catch (err: unknown) {
       const msg = extractError(err, 'Registration failed');
@@ -102,6 +108,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   logout: () => {
     Cookies.remove('access_token');
     Cookies.remove('user_role');
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     set({ user: null, token: null });
   },
 
