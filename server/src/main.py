@@ -21,10 +21,6 @@ app = FastAPI(
     version="2.0.0",
 )
 
-# ── Rate limiting ─────────────────────────────────────────────────────────────
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
 # ── CORS ──────────────────────────────────────────────────────────────────────
 # Add any preview/branch URLs in EXTRA_ORIGINS env var (comma-separated)
 _extra = [o.strip() for o in os.getenv("EXTRA_ORIGINS", "").split(",") if o.strip()]
@@ -50,6 +46,10 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+# ── Rate limiting ─────────────────────────────────────────────────────────────
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── Health / root ─────────────────────────────────────────────────────────────
 

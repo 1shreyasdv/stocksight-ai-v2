@@ -183,7 +183,7 @@ export default function NewsPage() {
 
                 {/* Thumbnail */}
                 {article.image && (
-                  <img src={article.image} alt="" className="w-20 h-16 object-cover rounded-lg flex-shrink-0 opacity-80" />
+                  <img src={article.image} referrerPolicy="no-referrer" alt="" className="w-20 h-16 object-cover rounded-lg flex-shrink-0 opacity-80" />
                 )}
               </div>
             </a>

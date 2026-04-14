@@ -20,7 +20,7 @@ export default function AdminDashPage() {
   const fetchStats = async () => {
     const t = token(); if (!t) return;
     try {
-      const res = await fetch(`${API_URL}/admin/stats`, { headers: { 'Authorization': `Bearer ${t}` } });
+      const res = await fetch(`${API_URL}/admin/stats`, { headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' } });
       if (res.ok) setStats(await res.json());
     } catch {}
   };
@@ -29,8 +29,8 @@ export default function AdminDashPage() {
     const t = token(); if (!t) return;
     try {
       const [g, v] = await Promise.all([
-        fetch(`${API_URL}/admin/chart/user-growth`, { headers: { 'Authorization': `Bearer ${t}` } }),
-        fetch(`${API_URL}/admin/chart/trading-volume`, { headers: { 'Authorization': `Bearer ${t}` } }),
+        fetch(`${API_URL}/admin/chart/user-growth`, { headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' } }),
+        fetch(`${API_URL}/admin/chart/trading-volume`, { headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' } }),
       ]);
       if (g.ok) {
         const data = await g.json();
@@ -46,7 +46,7 @@ export default function AdminDashPage() {
   const fetchLiveOrders = async () => {
     const t = token(); if (!t) return;
     try {
-      const res = await fetch(`${API_URL}/admin/orders`, { headers: { 'Authorization': `Bearer ${t}` } });
+      const res = await fetch(`${API_URL}/admin/orders`, { headers: { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' } });
       if (!res.ok) return;
       const data = await res.json();
       setBuyOrders(data.filter((o: any) => o.order_type === 'buy').slice(0, 10));
