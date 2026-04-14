@@ -1,41 +1,73 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://stocksight-ai-v2-api.onrender.com';
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  'https://stocksight-ai-v2-api.onrender.com';
 
 export const api = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 15000,
+  timeout: 20000,   // Render free tier can be slow on cold-start
+  withCredentials: false,
 });
 
-// Helper: get token from either cookies OR localStorage (whichever exists)
-export const getToken = (): string | null => {
-  return Cookies.get('access_token') || localStorage.getItem('token') || null;
+// ── Token helpers ─────────────────────────────────────────────────────────────
+
+export const getToken = (): string | null =>
+  Cookies.get('access_token') || localStorage.getItem('token') || null;
+
+export const clearAuth = () => {
+  Cookies.remove('access_token');
+  Cookies.remove('user_role');
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
 };
 
-// Attach token to every request
-api.interceptors.request.use((config) => {
-  const token = getToken();
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+// ── Request interceptor — attach Bearer token to EVERY request ────────────────
 
-// Handle 401 — clear both storage locations and redirect
+api.interceptors.request.use(
+  (config) => {
+    const token = getToken();
+    if (token) {
+      config.headers = config.headers ?? {};
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error),
+);
+
+// ── Response interceptor — handle 401 / 403 ───────────────────────────────────
+
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
-      if (!window.location.pathname.includes('admin')) {
-        Cookies.remove('access_token');
-        Cookies.remove('user_role');
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
+    const status   = err.response?.status;
+    const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+
+    if (status === 401) {
+      // Only redirect to login when NOT already on an auth page
+      const isAuthPage = ['/login', '/register', '/admin/login'].some((p) =>
+        pathname.startsWith(p),
+      );
+      if (!isAuthPage) {
+        clearAuth();
+        const isAdmin = pathname.includes('/admin');
+        window.location.href = isAdmin ? '/admin/login' : '/login';
       }
     }
+
+    // 403 on admin routes means the token role isn't "admin"
+    if (status === 403 && pathname.includes('/admin')) {
+      console.warn(
+        '[api] 403 on admin route — token may lack admin role. ' +
+        'Re-login via /admin/login.',
+      );
+    }
+
     return Promise.reject(err);
-  }
+  },
 );
 
 export default api;
