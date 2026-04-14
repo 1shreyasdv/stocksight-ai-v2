@@ -18,7 +18,7 @@ export default function AdminTransactionsPage() {
 
   const fetchTransactions = () => {
     const token = localStorage.getItem('token');
-    fetch('http://localhost:8000/admin/orders', {
+    fetch('https://stocksight-ai-v2-api.onrender.com/admin/orders', {
       headers: { 'Authorization': `Bearer ${token}` }
     })
     .then(r => r.json())

@@ -10,7 +10,7 @@ export default function HistoryPage() {
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) { router.push('/login'); return; }
-    fetch('http://localhost:8000/orders/', {
+    fetch('https://stocksight-ai-v2-api.onrender.com/orders/', {
       headers: { 'Authorization': `Bearer ${token}` }
     })
     .then(r => r.ok ? r.json() : [])

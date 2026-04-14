@@ -44,8 +44,8 @@ if frontend_url:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_origins=["*"], # Use "*" temporarily to see if the CORS error disappears
+    # allow_credentials=True, # Disabled to allow "*" origins without FastAPI throwing an exception
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
