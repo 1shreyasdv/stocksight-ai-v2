@@ -57,6 +57,22 @@ app.add_middleware(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# ── Background Tasks ────────────────────────────────────────────────────────────
+import asyncio
+from fastapi.concurrency import run_in_threadpool
+from src.routes.market import _fetch_all_prices
+
+@app.on_event("startup")
+async def start_background_tasks():
+    async def run_periodic_update():
+        while True:
+            try:
+                await run_in_threadpool(_fetch_all_prices)
+            except Exception as e:
+                pass
+            await asyncio.sleep(60)
+    asyncio.create_task(run_periodic_update())
+
 # ── Health / root ─────────────────────────────────────────────────────────────
 
 @app.get("/")

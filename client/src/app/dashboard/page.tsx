@@ -40,7 +40,7 @@ export default function DashboardPage() {
       }
     };
     loadPrices();
-    const interval = setInterval(loadPrices, 60000);
+    const interval = setInterval(loadPrices, 30000);
     return () => clearInterval(interval);
   }, []);
 

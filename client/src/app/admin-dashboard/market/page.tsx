@@ -11,7 +11,7 @@ export default function AdminMarketPage() {
     fetchLivePrices().then(prices => setStocks(buildStocksData(prices)));
     const interval = setInterval(() => {
       fetchLivePrices().then(prices => setStocks(buildStocksData(prices)));
-    }, 60000);
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 

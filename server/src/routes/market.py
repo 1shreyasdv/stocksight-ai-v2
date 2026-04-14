@@ -8,6 +8,9 @@ from typing import Optional
 
 router = APIRouter(prefix="/market", tags=["market"])
 
+from curl_cffi import requests as curl_requests
+yf_session = curl_requests.Session(impersonate="chrome")
+
 # ── Symbol map ────────────────────────────────────────────────────────────────
 SYMBOLS = {
     "BTC":  "BTC-USD",
@@ -66,6 +69,7 @@ def _fetch_all_prices() -> dict:
             auto_adjust=True,
             progress=False,
             threads=True,
+            session=yf_session,
         )
     except Exception:
         raw = None
@@ -101,7 +105,7 @@ def _fetch_all_prices() -> dict:
         except Exception:
             # Fallback: individual ticker fetch
             try:
-                ticker = yf.Ticker(yf_symbol)
+                ticker = yf.Ticker(yf_symbol, session=yf_session)
                 info   = ticker.fast_info          # lightweight endpoint
                 price      = float(info.last_price)
                 prev_close = float(info.previous_close)
