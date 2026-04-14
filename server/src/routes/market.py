@@ -46,7 +46,7 @@ _cache_ts: Optional[datetime] = None
 CACHE_TTL_SECONDS = 60          # refresh at most once per minute
 
 
-def _fetch_all_prices() -> dict:
+def _fetch_all_prices(force: bool = False) -> dict:
     """
     Pull 5-day history for every symbol so we always have yesterday's close
     available to calculate a real daily-change %.
@@ -54,7 +54,7 @@ def _fetch_all_prices() -> dict:
     global _price_cache, _cache_ts
 
     now = datetime.utcnow()
-    if _cache_ts and (now - _cache_ts).total_seconds() < CACHE_TTL_SECONDS:
+    if not force and _cache_ts and (now - _cache_ts).total_seconds() < CACHE_TTL_SECONDS:
         return _price_cache          # serve from cache
 
     result = {}
@@ -125,6 +125,12 @@ def _fetch_all_prices() -> dict:
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
+from fastapi import BackgroundTasks
+
+@router.get("/manual-refresh")
+def manual_refresh(background_tasks: BackgroundTasks):
+    background_tasks.add_task(_fetch_all_prices, force=True)
+    return {"message": "Refresh started in background"}
 
 @router.get("/prices")
 def get_prices():

@@ -67,7 +67,7 @@ async def start_background_tasks():
     async def run_periodic_update():
         while True:
             try:
-                await run_in_threadpool(_fetch_all_prices)
+                await run_in_threadpool(_fetch_all_prices, force=True)
             except Exception as e:
                 pass
             await asyncio.sleep(60)

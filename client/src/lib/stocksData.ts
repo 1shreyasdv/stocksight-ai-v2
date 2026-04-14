@@ -41,7 +41,7 @@ const FALLBACK_PRICES: Record<string, number> = {
 
 let priceCache: Record<string, { price: number; change: number; change_pct: number }> = {};
 let lastFetchTime = 0;
-const CACHE_TTL = 60000;
+const CACHE_TTL = 10000;
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://stocksight-ai-v2-api.onrender.com';
 
@@ -57,10 +57,13 @@ export async function fetchLivePrices(): Promise<Record<string, { price: number;
     });
     if (res.ok) {
       const json = await res.json();
-      if (json.success && json.data) {
+      if (json && typeof json === 'object' && !json.error) {
+        // If the backend wraps it in data, use it, else use raw json
+        const pricesData = json.data || json;
         const result: Record<string, { price: number; change: number; change_pct: number }> = {};
         for (const [sym, appKey] of Object.entries(YAHOO_SYMBOLS)) {
-          const q = json.data[appKey as string];
+          // Check if it's indexed by our DB symbol (BTC) or Yahoo symbol (BTC-USD)
+          const q = pricesData[appKey as string] || pricesData[sym];
           if (q) {
             result[sym] = {
               price: q.price ?? FALLBACK_PRICES[sym],

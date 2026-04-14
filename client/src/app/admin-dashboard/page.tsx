@@ -62,7 +62,7 @@ export default function AdminDashPage() {
     const i1 = setInterval(fetchStats, 30000);
     const i2 = setInterval(fetchLiveOrders, 8000);
     const i3 = setInterval(fetchCharts, 60000);
-    const i4 = setInterval(() => fetchLivePrices().then(p => setLiveStocks(buildStocksData(p))), 30000);
+    const i4 = setInterval(() => fetchLivePrices().then(p => setLiveStocks(buildStocksData(p))), 10000);
     return () => { clearInterval(i1); clearInterval(i2); clearInterval(i3); clearInterval(i4); };
   }, []);
 
