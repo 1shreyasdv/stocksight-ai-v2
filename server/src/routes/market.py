@@ -102,7 +102,11 @@ def _fetch_all_prices(force: bool = False) -> dict:
                 "change":     round(change, 4),
                 "change_pct": round(change_pct, 4),
             }
-        except Exception:
+            if force:
+                print(f"SUCCESS: {key} updated to {price}")
+        except Exception as e:
+            if force:
+                print(f"FAILED: {key} (batch) due to {e}")
             # Fallback: individual ticker fetch
             try:
                 ticker = yf.Ticker(yf_symbol, session=yf_session)
@@ -116,7 +120,11 @@ def _fetch_all_prices(force: bool = False) -> dict:
                     "change":     round(change, 4),
                     "change_pct": round(change_pct, 4),
                 }
-            except Exception:
+                if force:
+                    print(f"SUCCESS: {key} updated to {price} (individual)")
+            except Exception as e:
+                if force:
+                    print(f"FAILED: {key} (individual) due to {e}")
                 result[key] = {"price": 0.0, "change": 0.0, "change_pct": 0.0}
 
     _price_cache = result
