@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 
 from src.database import engine, Base
 from src.routes import auth, stocks, orders, users, admin, alerts, market, trading, news
+from src.routes import prices as prices_router
 from src.middleware.rate_limit import limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
@@ -54,3 +55,4 @@ app.include_router(alerts.router, prefix="/alerts", tags=["Alerts"])
 app.include_router(market.router, prefix="", tags=["Market"])
 app.include_router(trading.router, prefix="/trading", tags=["Trading"])
 app.include_router(news.router, prefix="", tags=["News"])
+app.include_router(prices_router.router, prefix="/market", tags=["Market"])

@@ -43,53 +43,41 @@ let priceCache: Record<string, { price: number; change: number; change_pct: numb
 let lastFetchTime = 0;
 const CACHE_TTL = 60000;
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://stocksight-ai-v2-api.onrender.com';
+
 export async function fetchLivePrices(): Promise<Record<string, { price: number; change: number; change_pct: number }>> {
   const now = Date.now();
   if (now - lastFetchTime < CACHE_TTL && Object.keys(priceCache).length > 0) {
     return priceCache;
   }
 
-  const symbols = Object.values(YAHOO_SYMBOLS).join(',');
-
-  // Try Yahoo Finance via a CORS proxy
-  const proxies = [
-    `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols}`,
-    `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${symbols}`,
-  ];
-
-  for (const url of proxies) {
-    try {
-      const res = await fetch(url, {
-        headers: { 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!res.ok) continue;
+  try {
+    const res = await fetch(`${API_URL}/market/prices`, {
+      signal: AbortSignal.timeout(10000),
+    });
+    if (res.ok) {
       const json = await res.json();
-      const quotes = json?.quoteResponse?.result ?? [];
-      if (quotes.length === 0) continue;
-
-      const result: Record<string, { price: number; change: number; change_pct: number }> = {};
-      for (const q of quotes) {
-        const key = Object.entries(YAHOO_SYMBOLS).find(([, v]) => v === q.symbol)?.[0];
-        if (key) {
-          result[key] = {
-            price: q.regularMarketPrice ?? FALLBACK_PRICES[key],
-            change: q.regularMarketChange ?? 0,
-            change_pct: q.regularMarketChangePercent ?? 0,
-          };
+      if (json.success && json.data) {
+        const result: Record<string, { price: number; change: number; change_pct: number }> = {};
+        for (const [sym, appKey] of Object.entries(YAHOO_SYMBOLS)) {
+          const q = json.data[appKey as string];
+          if (q) {
+            result[sym] = {
+              price: q.price ?? FALLBACK_PRICES[sym],
+              change: q.change ?? 0,
+              change_pct: q.change_pct ?? 0,
+            };
+          }
         }
+        priceCache = result;
+        lastFetchTime = now;
+        return result;
       }
-
-      priceCache = result;
-      lastFetchTime = now;
-      return result;
-    } catch {
-      continue;
     }
+  } catch (e) {
+    console.warn('Backend price proxy failed, using fallback');
   }
 
-  // All proxies failed — return fallbacks silently
-  console.warn('Live prices unavailable, using fallback');
   const fallback: Record<string, { price: number; change: number; change_pct: number }> = {};
   for (const sym of Object.keys(FALLBACK_PRICES)) {
     fallback[sym] = { price: FALLBACK_PRICES[sym], change: 0, change_pct: 0 };

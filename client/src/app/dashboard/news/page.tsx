@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 
 const GNEWS_KEY = process.env.NEXT_PUBLIC_GNEWS_API_KEY;
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://stocksight-ai-v2-api.onrender.com';
 
 interface NewsItem {
   title: string;
@@ -59,12 +60,10 @@ export default function NewsPage() {
       setLoading(true);
       setError('');
       try {
-        if (!GNEWS_KEY) throw new Error('No API key');
-        const res = await fetch(
-          `https://gnews.io/api/v4/search?q=stock+market+crypto+finance&lang=en&max=20&sortby=publishedAt&token=${GNEWS_KEY}`
-        );
-        if (!res.ok) throw new Error(`GNews error: ${res.status}`);
+        const res = await fetch(`${API_URL}/market/news`);
+        if (!res.ok) throw new Error(`News fetch failed: ${res.status}`);
         const json = await res.json();
+        if (!json.success) throw new Error('News API returned no data');
         setNews(json.articles ?? []);
       } catch (e: any) {
         setError(e.message || 'Failed to load news');

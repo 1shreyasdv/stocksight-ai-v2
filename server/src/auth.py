@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Optional
-import bcrypt
+import bcrypt as _bcrypt
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -15,20 +15,31 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "43200"))
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
+
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(12)).decode('utf-8')
+    """Hash a password using bcrypt directly — no passlib."""
+    salt = _bcrypt.gensalt(rounds=12)
+    hashed = _bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
+
 
 def verify_password(plain: str, hashed: str) -> bool:
+    """Verify a bcrypt password — no passlib."""
     try:
-        return bcrypt.checkpw(plain.encode('utf-8'), hashed.encode('utf-8'))
+        return _bcrypt.checkpw(
+            plain.encode('utf-8'),
+            hashed.encode('utf-8')
+        )
     except Exception:
         return False
+
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
 
 def decode_token(token: str) -> dict:
     try:
@@ -39,6 +50,7 @@ def decode_token(token: str) -> dict:
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
 
 def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -54,6 +66,7 @@ def get_current_user(
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account suspended")
     return user
+
 
 def require_admin(current_user: models.User = Depends(get_current_user)) -> models.User:
     if current_user.role not in ("admin",):
