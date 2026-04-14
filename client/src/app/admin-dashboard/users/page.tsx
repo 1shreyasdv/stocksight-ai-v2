@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 
 export default function UsersPage() {
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://stocksight-ai-v2-api.onrender.com';
   const [users, setUsers] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -10,7 +11,7 @@ export default function UsersPage() {
   const token = () => localStorage.getItem('token');
 
   useEffect(() => {
-    fetch('http://localhost:8000/admin/users', {
+    fetch(`${API_URL}/admin/users`, {
       headers: { 'Authorization': `Bearer ${token()}` }
     })
     .then(r => r.ok ? r.json() : [])
@@ -20,7 +21,7 @@ export default function UsersPage() {
 
   const handleBan = async (userId: number, currentlyActive: boolean) => {
     setRowError(null);
-    const res = await fetch(`http://localhost:8000/admin/users/${userId}/status`, {
+    const res = await fetch(`${API_URL}/admin/users/${userId}/status`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token()}`,

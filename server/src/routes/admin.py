@@ -160,7 +160,7 @@ def trading_volume_chart(
     _: models.User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    """Real daily buy/sell order counts for the last 7 days."""
+    from datetime import datetime, timedelta
     now = datetime.utcnow()
     days = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
     result = []
@@ -168,16 +168,16 @@ def trading_volume_chart(
         day_date = now - timedelta(days=i)
         day_start = day_date.replace(hour=0, minute=0, second=0, microsecond=0)
         day_end = day_start + timedelta(days=1)
-        buy_count = db.query(models.Order).filter(
+        
+        # Count ALL orders that day
+        all_orders = db.query(models.Order).filter(
             models.Order.created_at >= day_start,
             models.Order.created_at < day_end,
-            models.Order.order_type == 'buy'
-        ).count()
-        sell_count = db.query(models.Order).filter(
-            models.Order.created_at >= day_start,
-            models.Order.created_at < day_end,
-            models.Order.order_type == 'sell'
-        ).count()
+        ).all()
+        
+        buy_count = sum(1 for o in all_orders if str(o.order_type).lower() in ('buy', 'ordertype.buy'))
+        sell_count = sum(1 for o in all_orders if str(o.order_type).lower() in ('sell', 'ordertype.sell'))
+        
         result.append({
             "label": days[day_date.weekday()],
             "buy": buy_count,
