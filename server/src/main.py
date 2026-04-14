@@ -13,7 +13,13 @@ from slowapi import _rate_limit_exceeded_handler
 
 load_dotenv()
 
+from sqlalchemy import text
 Base.metadata.create_all(bind=engine)
+try:
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE wallets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;"))
+except Exception as e:
+    print(f"Migration error or column exists: {e}")
 
 app = FastAPI(
     title="StockSight AI API",
