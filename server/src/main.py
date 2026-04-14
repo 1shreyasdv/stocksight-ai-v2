@@ -28,19 +28,25 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # ── CORS ──────────────────────────────────────────────────────────────────────
 # Add any preview/branch URLs in EXTRA_ORIGINS env var (comma-separated)
 _extra = [o.strip() for o in os.getenv("EXTRA_ORIGINS", "").split(",") if o.strip()]
+frontend_url = os.getenv("FRONTEND_URL")
 
 ALLOWED_ORIGINS = [
     "https://stocksight-vision.vercel.app",
+    "https://stocksight-vision-lk4m37x12-1shreyasdvs-projects.vercel.app",
     "http://localhost:3000",
     "http://localhost:3001",
+    "http://localhost:5173",
     *_extra,
 ]
+
+if frontend_url:
+    ALLOWED_ORIGINS.append(frontend_url)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
 )
